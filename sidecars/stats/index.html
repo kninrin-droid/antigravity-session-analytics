@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phân tích Session</title>
+<script src="/preload.js"></script>
+<style>
+  :root {
+    --bg: var(--background, #141518);
+    --card: color-mix(in srgb, var(--foreground, #e5e7eb) 4%, transparent);
+    --card-hi: color-mix(in srgb, var(--foreground, #e5e7eb) 7%, transparent);
+    --fg: var(--foreground, #e5e7eb);
+    --dim: var(--muted-foreground, #9ca3af);
+    --line: var(--border, rgba(148, 163, 184, .22));
+    --green: #10b981;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --amber: #f59e0b;
+    --rose: #f43f5e;
+    --cyan: #06b6d4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: var(--fg);
+    background: var(--bg);
+    font: 12.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--dim) 32%, transparent);
+    border: 2px solid transparent; border-radius: 999px; background-clip: padding-box;
+  }
+  main { padding: 12px 13px 20px; max-width: 780px; margin: 0 auto; }
+  .num { font-variant-numeric: tabular-nums; }
+  .dim { color: var(--dim); }
+  .empty { margin: 48px 12px; text-align: center; color: var(--dim); line-height: 1.6; }
+
+  /* Header */
+  .hdr { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .hdr-left { min-width: 0; flex: 1; }
+  .title { font-size: 13.5px; font-weight: 600; line-height: 1.35; word-break: break-word; }
+  .meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 5px; font-size: 11px; color: var(--dim); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 7px; border-radius: 999px; font-size: 11px;
+    background: var(--card-hi); border: 1px solid var(--line); color: var(--fg);
+  }
+  .pill.model { color: var(--green); border-color: color-mix(in srgb, var(--green) 35%, transparent); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); display: inline-block; }
+  .live-dot.on { background: var(--green); }
+  .actions { display: flex; gap: 5px; flex: none; }
+  button {
+    font: inherit; font-size: 11.5px; color: var(--dim); cursor: pointer;
+    background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px;
+  }
+  button:hover { color: var(--fg); border-color: var(--dim); }
+
+  /* Score + Hero card */
+  .hero {
+    display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center;
+    margin-top: 12px; padding: 11px 12px; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--line);
+  }
+  .ring-wrap { position: relative; width: 58px; height: 58px; flex: none; }
+  .ring-wrap svg { transform: rotate(-90deg); display: block; }
+  .ring-val {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700;
+  }
+  .opt-top { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .opt-badge { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+  .opt-ok { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+  .opt-near { background: color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); }
+  .opt-new { background: color-mix(in srgb, var(--rose) 20%, transparent); color: var(--rose); }
+  .opt-wait { background: var(--card-hi); color: var(--dim); }
+  .opt-reason { margin-top: 4px; font-size: 11.5px; color: var(--dim); line-height: 1.4; }
+
+  /* KPI Grid */
+  .kpis {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+    margin-top: 10px;
+  }
+  .kpi {
+    padding: 9px 10px; border-radius: 9px;
+    background: var(--card); border: 1px solid var(--line);
+  }
+  .kpi-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+  .kpi-val { font-size: 17px; font-weight: 700; margin-top: 2px; }
+  .kpi-sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .kpi-sub .good { color: var(--green); font-weight: 600; }
+
+  /* Cost composition bar */
+  .box {
+    margin-top: 10px; padding: 10px 11px; border-radius: 9px;
+    background: var(--card); border: 1px solid var(--line);
+  }
+  .box-hdr {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--dim); margin-bottom: 8px;
+  }
+  .bar-track {
+    display: flex; height: 8px; border-radius: 999px; overflow: hidden;
+    background: color-mix(in srgb, var(--dim) 18%, transparent);
+  }
+  .bar-in { background: var(--blue); }
+  .bar-cache { background: var(--green); }
+  .bar-out { background: var(--purple); }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 7px; font-size: 11px; color: var(--dim); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+  /* Chart */
+  .chart-wrap { width: 100%; overflow: hidden; }
+  .chart-svg { width: 100%; height: 116px; display: block; }
+  .chart-hint { font-size: 10.5px; color: var(--dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-top: 12px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .tab {
+    border: 1px solid transparent; border-radius: 6px; padding: 4px 9px;
+    font-size: 12px; color: var(--dim); background: transparent; cursor: pointer;
+  }
+  .tab.active { color: var(--fg); background: var(--card-hi); border-color: var(--line); font-weight: 600; }
+
+  /* Step list */
+  .step-item {
+    border-bottom: 1px solid var(--line); padding: 7px 4px; cursor: pointer;
+  }
+  .step-item:hover { background: var(--card); }
+  .step-item.hl { background: color-mix(in srgb, var(--blue) 14%, transparent); }
+  .step-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .step-id { font-weight: 600; font-size: 12px; }
+  .step-cost { font-weight: 600; color: var(--green); }
+  .step-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .step-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .tag {
+    font-size: 10.5px; padding: 1px 6px; border-radius: 4px;
+    background: var(--card-hi); border: 1px solid var(--line); color: var(--fg);
+  }
+  .step-detail {
+    margin-top: 6px; padding: 7px 8px; border-radius: 6px; font-size: 11px;
+    background: var(--card-hi); border: 1px solid var(--line); line-height: 1.5;
+  }
+  .bill-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
+  .err-txt { color: var(--rose); margin-top: 4px; }
+
+  /* Simple rows for Turns / Models / Tools */
+  .list-row {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    padding: 7px 2px; border-bottom: 1px solid var(--line);
+  }
+  .list-main { min-width: 0; flex: 1; }
+  .list-title { font-size: 12px; word-break: break-word; }
+  .list-sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .list-right { text-align: right; flex: none; font-size: 12px; font-weight: 600; }
+
+  footer { margin-top: 14px; font-size: 10.5px; color: var(--dim); display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<main id="main"><p class="empty">Đang đọc phiên hội thoại hiện tại…</p></main>
+<script>
+(() => {
+  const POLL_MS = 3000;
+  const params = new URLSearchParams(location.search);
+  const conversationId = (window.sidecar && window.sidecar.conversationId) || params.get('conversationId') || '';
+  const doFetch = (window.sidecar && window.sidecar.fetch) ? window.sidecar.fetch.bind(window.sidecar) : fetch;
+  const main = document.getElementById('main');
+
+  let report = null;
+  let lastSig = '';
+  let activeTab = 'steps';
+  let expandedStep = null;
+  let highlightStep = null;
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  function fmtTok(n) {
+    n = Number(n || 0);
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(Math.round(n));
+  }
+  function fmtUsd(v) {
+    v = Number(v || 0);
+    if (v >= 1) return '$' + v.toFixed(2);
+    if (v >= 0.01) return '$' + v.toFixed(3);
+    return '$' + v.toFixed(4);
+  }
+  function fmtVnd(usd, rate) {
+    const v = Math.round(Number(usd || 0) * (rate || 25500));
+    if (v >= 1e6) return (v / 1e6).toFixed(2) + ' trđ';
+    return v.toLocaleString('vi-VN') + 'đ';
+  }
+  function fmtDur(sec) {
+    sec = Number(sec || 0);
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60), s = sec % 60;
+    if (m < 60) return `${m}p ${s}s`;
+    return `${Math.floor(m / 60)}g ${m % 60}p`;
+  }
+  function fmtTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function renderChart(steps) {
+    if (!steps || steps.length === 0) return '<div class="dim">Chưa có bước gọi model nào.</div>';
+    const W = 420, H = 122, padL = 6, padR = 6, padT = 10, padB = 18;
+    const iw = W - padL - padR, ih = H - padT - padB;
+    const maxCost = Math.max(...steps.map(s => s.cost), 1e-6);
+    const maxCtx = Math.max(...steps.map(s => s.input_tokens), 1);
+    const n = steps.length;
+    const barW = Math.max(4, Math.min(18, (iw / n) * 0.68));
+    const baseY = padT + ih;
+
+    let bars = '';
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const s = steps[i];
+      const cx = n === 1 ? padL + iw / 2 : padL + (i / (n - 1)) * (iw - barW) + barW / 2;
+      const bx = cx - barW / 2;
+      const hIn = (s.input_cost / maxCost) * ih;
+      const hCa = (s.cache_cost / maxCost) * ih;
+      const hOut = (s.output_cost / maxCost) * ih;
+      const totH = Math.max(2, hIn + hCa + hOut);
+      const scale = totH / Math.max(hIn + hCa + hOut, 1e-9);
+      const shIn = hIn * scale, shCa = hCa * scale, shOut = hOut * scale;
+
+      const yIn = baseY - shIn;
+      const yCa = yIn - shCa;
+      const yOut = yCa - shOut;
+
+      const cy = baseY - (s.input_tokens / maxCtx) * ih;
+      pts.push(`${cx.toFixed(1)},${cy.toFixed(1)}`);
+      const isHl = highlightStep === s.step_index;
+      const op = isHl ? '1' : '0.82';
+      const tip = `Bước #${s.step_index} (lượt ${s.turn_index || 1}) · ${fmtUsd(s.cost)}\nInput mới: ${fmtTok(s.uncached_input_tokens)} (${fmtUsd(s.input_cost)})\nCache: ${fmtTok(s.cached_tokens)} (${s.cache_hit_rate}%, ${fmtUsd(s.cache_cost)})\nOutput: ${fmtTok(s.output_tokens)} (${fmtUsd(s.output_cost)})\nNgữ cảnh: ${fmtTok(s.input_tokens)}`;
+
+      bars += `<g class="chart-bar" data-step="${s.step_index}" style="cursor:pointer" opacity="${op}">
+        <title>${tip}</title>
+        ${isHl ? `<rect x="${(bx - 1.5).toFixed(1)}" y="${(yOut - 1.5).toFixed(1)}" width="${(barW + 3).toFixed(1)}" height="${(totH + 3).toFixed(1)}" rx="2.5" fill="none" stroke="var(--fg)" stroke-width="1.2"/>` : ''}
+        ${shIn > 0.2 ? `<rect x="${bx.toFixed(1)}" y="${yIn.toFixed(1)}" width="${barW.toFixed(1)}" height="${shIn.toFixed(1)}" fill="var(--blue)"/>` : ''}
+        ${shCa > 0.2 ? `<rect x="${bx.toFixed(1)}" y="${yCa.toFixed(1)}" width="${barW.toFixed(1)}" height="${shCa.toFixed(1)}" fill="var(--green)"/>` : ''}
+        ${shOut > 0.2 ? `<rect x="${bx.toFixed(1)}" y="${yOut.toFixed(1)}" width="${barW.toFixed(1)}" height="${shOut.toFixed(1)}" fill="var(--purple)"/>` : ''}
+      </g>`;
+    }
+    const line = pts.length > 1 ? `<polyline fill="none" stroke="var(--amber)" stroke-width="1.8" points="${pts.join(' ')}" pointer-events="none"/>` : '';
+    return `<svg class="chart-svg" style="height:122px" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" stroke="var(--line)" stroke-width="1"/>
+      ${bars}${line}
+      <text x="${padL}" y="${H - 4}" font-size="9.5" fill="var(--dim)">Bước 1</text>
+      <text x="${W - padR}" y="${H - 4}" text-anchor="end" font-size="9.5" fill="var(--dim)">Bước ${n} · Đỉnh ${fmtTok(maxCtx)}</text>
+    </svg>
+    <div class="legend" style="margin-top:5px">
+      <span><i class="dot" style="background:var(--blue)"></i>Input mới</span>
+      <span><i class="dot" style="background:var(--green)"></i>Cache</span>
+      <span><i class="dot" style="background:var(--purple)"></i>Output</span>
+      <span><i class="dot" style="background:var(--amber);height:3px;border-radius:2px"></i>Ngữ cảnh</span>
+    </div>`;
+  }
+
+  function exportCsv() {
+    if (!report || !report.steps) return;
+    const head = ['step_index','turn_index','model','input_tokens','uncached_input','cached_tokens','output_tokens','cache_hit_pct','delta_context','cost_usd','cum_cost_usd','tools'];
+    const rows = report.steps.map(s => [
+      s.step_index, s.turn_index, `"${s.model}"`, s.input_tokens, s.uncached_input_tokens,
+      s.cached_tokens, s.output_tokens, s.cache_hit_rate, s.delta_context,
+      s.cost.toFixed(6), s.cum_cost.toFixed(6), `"${(s.tool_details || []).map(t => t.name).join('; ')}"`
+    ].join(','));
+    const blob = new Blob(['\uFEFF' + [head.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `session-${report.session_id.slice(0, 8)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function render() {
+    if (!report) return;
+    if (report.error === 'no-conversation') {
+      main.innerHTML = '<p class="empty">Hãy mở một cuộc hội thoại trong Antigravity.<br>Bảng sẽ tự động hiển thị phân tích của đúng phiên đó.</p>';
+      return;
+    }
+    if (report.error === 'no-transcript') {
+      main.innerHTML = `<p class="empty">Phiên này chưa có dữ liệu nhật ký (<code>transcript.jsonl</code>).<br>Gửi tin nhắn đầu tiên để bắt đầu theo dõi.</p>`;
+      return;
+    }
+    if (report.error) {
+      main.innerHTML = `<p class="empty">Không đọc được dữ liệu phiên: ${esc(report.message || report.error)}</p>`;
+      return;
+    }
+
+    const t = report.totals;
+    const opt = report.optimum;
+    const rate = report.usd_to_vnd || 25500;
+    const scoreColor = opt.state === 'ok' ? 'var(--green)' : opt.state === 'near' ? 'var(--amber)' : opt.state === 'new' ? 'var(--rose)' : 'var(--dim)';
+    const badgeCls = opt.state === 'ok' ? 'opt-ok' : opt.state === 'near' ? 'opt-near' : opt.state === 'new' ? 'opt-new' : 'opt-wait';
+    const r = 24, circ = 2 * Math.PI * r, dash = circ * (1 - (opt.score / 100));
+
+    const totCostSafe = Math.max(t.total_cost, 1e-9);
+    const pIn = (t.input_cost / totCostSafe) * 100;
+    const pCa = (t.cache_cost / totCostSafe) * 100;
+    const pOut = (t.output_cost / totCostSafe) * 100;
+
+    let tabBody = '';
+    if (activeTab === 'steps') {
+      const rev = [...report.steps].reverse();
+      tabBody = rev.length ? rev.map(s => {
+        const isOpen = expandedStep === s.step_index;
+        const isHl = highlightStep === s.step_index;
+        const deltaStr = s.delta_context >= 0 ? `+${fmtTok(s.delta_context)}` : fmtTok(s.delta_context);
+        const toolsHtml = (s.tool_details || []).length
+          ? `<div class="step-tools">${s.tool_details.map(td => `<span class="tag" title="${esc(td.summary)}">${esc(td.name)}</span>`).join('')}</div>` : '';
+        const detailHtml = isOpen ? `<div class="step-detail">
+          <div class="dim">Hóa đơn bước #${s.step_index} (${esc(s.model)}) · Lượt hỏi #${s.turn_index || 1} · ${fmtTime(s.timestamp)}</div>
+          <div class="bill-grid num">
+            <div>Input mới<br><b>${fmtTok(s.uncached_input_tokens)}</b> (${fmtUsd(s.input_cost)})</div>
+            <div>Cache đọc<br><b>${fmtTok(s.cached_tokens)}</b> (${fmtUsd(s.cache_cost)})</div>
+            <div>Output<br><b>${fmtTok(s.output_tokens)}</b> (${fmtUsd(s.output_cost)})</div>
+          </div>
+          <div class="dim" style="margin-top:5px">Lũy kế đến bước này: <b style="color:var(--fg)">${fmtUsd(s.cum_cost)}</b> (${fmtVnd(s.cum_cost, rate)}) · Tiết kiệm cache: <b style="color:var(--green)">+${fmtUsd(s.cache_saved)}</b></div>
+          ${s.preview ? `<div style="margin-top:5px;color:var(--dim)">"${esc(s.preview)}"</div>` : ''}
+          ${s.error ? `<div class="err-txt">Lỗi: ${esc(s.error)}</div>` : ''}
+        </div>` : '';
+        return `<div class="step-item ${isHl ? 'hl' : ''}" data-step="${s.step_index}">
+          <div class="step-top">
+            <span class="step-id num">#${s.step_index} <span class="dim" style="font-weight:400">· lượt ${s.turn_index || 1}</span></span>
+            <span class="step-cost num">${fmtUsd(s.cost)} <span class="dim" style="font-weight:400">(${fmtUsd(s.cum_cost)})</span></span>
+          </div>
+          <div class="step-meta num">
+            <span style="color:var(--blue)">In ${fmtTok(s.uncached_input_tokens)}</span>
+            <span style="color:var(--green)">Cache ${fmtTok(s.cached_tokens)} (${s.cache_hit_rate}%)</span>
+            <span style="color:var(--purple)">Out ${fmtTok(s.output_tokens)}</span>
+          </div>
+          <div class="step-meta num">
+            <span>Ngữ cảnh ${fmtTok(s.input_tokens)} (${deltaStr})</span>
+            ${s.duration_ms ? `<span>${(s.duration_ms / 1000).toFixed(1)}s</span>` : ''}
+          </div>
+          ${toolsHtml}${detailHtml}
+        </div>`;
+      }).join('') : '<p class="dim" style="padding:12px 0">Chưa có bước gọi model nào.</p>';
+    } else if (activeTab === 'turns') {
+      tabBody = (report.turns || []).length ? [...report.turns].reverse().map(tr => `
+        <div class="list-row">
+          <div class="list-main">
+            <div class="list-title"><b>Lượt #${tr.turn_index}:</b> ${esc(tr.text || '(Không có nội dung)')}</div>
+            <div class="list-sub num">${tr.step_count} bước · ${tr.tool_calls} tool · Ra ${fmtTok(tr.output_tokens)} · ${fmtTime(tr.timestamp)}</div>
+          </div>
+          <div class="list-right num" style="color:var(--green)">${fmtUsd(tr.cost)}<div class="dim" style="font-weight:400;font-size:10.5px">${fmtVnd(tr.cost, rate)}</div></div>
+        </div>`).join('') : '<p class="dim" style="padding:12px 0">Chưa có lượt hỏi nào.</p>';
+    } else {
+      const mHtml = (report.models || []).map(m => `
+        <div class="list-row">
+          <div class="list-main">
+            <div class="list-title"><b>${esc(m.model)}</b></div>
+            <div class="list-sub num">${m.steps} bước · Vào ${fmtTok(m.input_tokens)} (Cache ${fmtTok(m.cached_tokens)}) · Ra ${fmtTok(m.output_tokens)}</div>
+          </div>
+          <div class="list-right num" style="color:var(--green)">${fmtUsd(m.cost)}</div>
+        </div>`).join('');
+      const tHtml = (report.tools || []).length
+        ? `<div class="box-hdr" style="margin-top:12px">Công cụ đã gọi (${report.tool_call_count})</div>
+           <div class="step-tools">${report.tools.map(tl => `<span class="tag">${esc(tl.name)} ×${tl.count}</span>`).join('')}</div>` : '';
+      tabBody = `<div class="box-hdr" style="margin-top:8px">Model sử dụng</div>${mHtml || '<div class="dim">Chưa có dữ liệu.</div>'}${tHtml}`;
+    }
+
+    main.innerHTML = `
+      <div class="hdr">
+        <div class="hdr-left">
+          <div class="title">${esc(report.title)}</div>
+          <div class="meta-row num">
+            <span class="pill model"><span class="live-dot on"></span>${esc(report.primary_model)}</span>
+            <span class="pill">${esc(report.session_id.slice(0, 8))}</span>
+            <span>${report.user_turn_count} lượt · ${report.token_step_count} bước · ${report.tool_call_count} tool</span>
+            ${report.duration_seconds ? `<span>· ${fmtDur(report.duration_seconds)}</span>` : ''}
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btnCsv" title="Xuất bảng từng bước ra CSV">CSV</button>
+          <button id="btnRef" title="Làm mới ngay">↻</button>
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="ring-wrap">
+          <svg width="58" height="58" viewBox="0 0 58 58">
+            <circle cx="29" cy="29" r="${r}" fill="none" stroke="var(--line)" stroke-width="5"/>
+            <circle cx="29" cy="29" r="${r}" fill="none" stroke="${scoreColor}" stroke-width="5"
+              stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${dash.toFixed(1)}" stroke-linecap="round"/>
+          </svg>
+          <div class="ring-val num" style="color:${scoreColor}">${opt.score}</div>
+        </div>
+        <div>
+          <div class="opt-top">
+            <span class="opt-badge ${badgeCls}">${esc(opt.label)}</span>
+            <span class="dim num" style="font-size:11px">Biên ${fmtUsd(opt.marginal_cost)}/bước</span>
+          </div>
+          <div class="opt-reason">${esc(opt.reason)}</div>
+        </div>
+      </div>
+
+      <div class="kpis num">
+        <div class="kpi">
+          <div class="kpi-lbl">Tổng chi phí phiên</div>
+          <div class="kpi-val" style="color:var(--green)">${fmtUsd(t.total_cost)}</div>
+          <div class="kpi-sub">≈ ${fmtVnd(t.total_cost, rate)} · <span class="good">+${fmtUsd(t.cache_saved)} cache</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-lbl">Ngữ cảnh (hiện / đỉnh)</div>
+          <div class="kpi-val" style="color:var(--blue)">${fmtTok(t.current_context)}</div>
+          <div class="kpi-sub">Đỉnh ${fmtTok(t.peak_context)} · ${opt.ctx_pct}% ngưỡng ${fmtTok(t.ctx_crit)}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-lbl">Tổng Token</div>
+          <div class="kpi-val">${fmtTok(t.total_tokens)}</div>
+          <div class="kpi-sub">Cache ${t.cache_hit_pct}% · Ra ${fmtTok(t.output_tokens)}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-lbl">Trung bình / lượt hỏi</div>
+          <div class="kpi-val">${fmtUsd(t.cost_per_turn)}</div>
+          <div class="kpi-sub">${fmtUsd(opt.mean_cost)}/bước${report.error_count ? ` · <span style="color:var(--rose)">${report.error_count} lỗi</span>` : ''}</div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="box-hdr"><span>Cơ cấu chi phí</span><span class="num">${fmtUsd(t.total_cost)}</span></div>
+        <div class="bar-track">
+          <div class="bar-in" style="width:${pIn.toFixed(1)}%"></div>
+          <div class="bar-cache" style="width:${pCa.toFixed(1)}%"></div>
+          <div class="bar-out" style="width:${pOut.toFixed(1)}%"></div>
+        </div>
+        <div class="legend num">
+          <span><i class="dot" style="background:var(--blue)"></i>Input mới ${fmtUsd(t.input_cost)}</span>
+          <span><i class="dot" style="background:var(--green)"></i>Cache ${fmtUsd(t.cache_cost)}</span>
+          <span><i class="dot" style="background:var(--purple)"></i>Output ${fmtUsd(t.output_cost)}</span>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="box-hdr"><span>Xu hướng $/bước & ngữ cảnh</span><span class="chart-hint">Bấm cột để mở bước</span></div>
+        <div class="chart-wrap">${renderChart(report.steps)}</div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab ${activeTab === 'steps' ? 'active' : ''}" data-tab="steps">Từng bước (${report.token_step_count})</button>
+        <button class="tab ${activeTab === 'turns' ? 'active' : ''}" data-tab="turns">Lượt hỏi (${report.user_turn_count})</button>
+        <button class="tab ${activeTab === 'models' ? 'active' : ''}" data-tab="models">Model & Tool</button>
+      </div>
+      <div id="tabBody">${tabBody}</div>
+
+      <footer>
+        <span>Tự cập nhật mỗi 3s · Độc lập theo phiên đang mở</span>
+        <span class="num">${report.updated_at ? new Date(report.updated_at).toLocaleTimeString('vi-VN') : ''}</span>
+      </footer>
+    `;
+
+    main.querySelector('#btnRef')?.addEventListener('click', () => load(true));
+    main.querySelector('#btnCsv')?.addEventListener('click', exportCsv);
+    main.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
+      activeTab = btn.dataset.tab;
+      render();
+    }));
+    main.querySelectorAll('.step-item').forEach(el => el.addEventListener('click', () => {
+      const idx = Number(el.dataset.step);
+      expandedStep = expandedStep === idx ? null : idx;
+      highlightStep = expandedStep;
+      render();
+    }));
+    main.querySelectorAll('.chart-bar').forEach(el => el.addEventListener('click', () => {
+      const idx = Number(el.dataset.step);
+      activeTab = 'steps';
+      expandedStep = idx;
+      highlightStep = idx;
+      render();
+      const target = main.querySelector(`.step-item[data-step="${idx}"]`);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
+  }
+
+  async function load(force = false) {
+    if (!conversationId) {
+      report = { error: 'no-conversation' };
+      render();
+      return;
+    }
+    try {
+      const res = await doFetch(`/api/session?conversationId=${encodeURIComponent(conversationId)}`);
+      const data = await res.json();
+      const sig = JSON.stringify({ ...data, updated_at: '' });
+      if (force || sig !== lastSig) {
+        lastSig = sig;
+        report = data;
+        render();
+      }
+    } catch (err) {
+      if (!report) {
+        report = { error: 'failed', message: err.message };
+        render();
+      }
+    }
+  }
+
+  load(true);
+  setInterval(() => load(false), POLL_MS);
+})();
+</script>
+</body>
+</html>

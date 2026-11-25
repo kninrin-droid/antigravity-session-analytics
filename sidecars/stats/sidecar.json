@@ -1,0 +1,18 @@
+{
+  "command": "node",
+  "args": ["main.mjs"],
+  "restart_policy": "always",
+  "display_name": "Phân tích Session",
+  "description": "Phân tích chi phí, token, cache, ngữ cảnh và điểm tối ưu cho đúng phiên hội thoại đang mở.",
+  "has_web_ui": true,
+  "ui_config": {
+    "display_name": "Phân tích Session",
+    "views": [
+      {
+        "path": "/",
+        "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE",
+        "title": "Phân tích Session"
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "antigravity-session-analytics",
+  "displayName": "Session Analytics",
+  "description": "Live per-session cost, token, cache hit rate, context growth, stacked step chart, and optimum score in Antigravity's side panel.",
+  "version": "1.0.0",
+  "author": "kindeptrai",
+  "repository": "https://github.com/kninrin-droid/antigravity-session-analytics",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Open the Session Analytics side panel for this conversation",
+    "Check how much this session has cost and whether I should start a new conversation",
+    "Find which step in this session consumed the most tokens"
+  ]
+}
